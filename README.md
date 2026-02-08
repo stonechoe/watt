@@ -1,3 +1,5 @@
+[![Vibe Coded](https://img.shields.io/badge/Vibe–Coded-blue?style=for-the-badge)]()
+
 # watt
 
 A macOS CLI utility that displays real-time power consumption of your MacBook, broken down by source (charger vs battery).
