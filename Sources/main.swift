@@ -168,26 +168,6 @@ func readBatteryInfo() -> BatteryInfo? {
     )
 }
 
-// MARK: - Display
-
-func formatWatts(_ w: Double) -> String {
-    if abs(w) >= 10 {
-        return String(format: "%.1f W", w)
-    } else {
-        return String(format: "%.2f W", w)
-    }
-}
-
-func formatTime(_ minutes: Int) -> String {
-    if minutes <= 0 || minutes >= 65535 { return "--" }
-    let h = minutes / 60
-    let m = minutes % 60
-    if h > 0 {
-        return "\(h)h \(m)m"
-    }
-    return "\(m)m"
-}
-
 // MARK: - Main
 
 func displayPowerInfo(smc: SMCReader?) {
@@ -213,7 +193,6 @@ func displayPowerInfo(smc: SMCReader?) {
     if let sp = systemPower, sp > 0 {
         systemW = sp
     } else if batteryDischarging {
-        // Fallback: on battery, system power = battery discharge rate
         systemW = abs(batteryPowerRaw)
     } else {
         systemW = 0
@@ -225,51 +204,38 @@ func displayPowerInfo(smc: SMCReader?) {
 
     if battery.externalConnected {
         if batteryDischarging {
-            // Battery supplementing charger (heavy load)
             fromBattery = abs(batteryPowerRaw)
             fromCharger = max(0, systemW - fromBattery)
         } else {
-            // Charger provides all system power
             fromCharger = systemW
             fromBattery = 0
         }
     } else {
-        // On battery only
         fromCharger = 0
         fromBattery = systemW
     }
 
-    // Battery charging power (what goes into the battery)
     let batteryChargingW = batteryCharging ? batteryPowerRaw : 0
-
-    // Total charger output (system + battery charging)
     let chargerTotalOutput = battery.externalConnected ? fromCharger + batteryChargingW : 0
 
-    // Display
-    print("System Power:  \(formatWatts(systemW))")
-    print("  From Charger:  \(formatWatts(fromCharger))")
-    print("  From Battery:  \(formatWatts(fromBattery))")
+    let snapshot = PowerSnapshot(
+        systemW: systemW,
+        fromCharger: fromCharger,
+        fromBattery: fromBattery,
+        batteryPercent: battery.currentCapacity,
+        isCharging: batteryCharging,
+        isDischarging: batteryDischarging,
+        fullyCharged: battery.fullyCharged,
+        externalConnected: battery.externalConnected,
+        batteryChargingW: batteryChargingW,
+        batteryDischargingW: abs(batteryPowerRaw),
+        chargerTotalOutput: chargerTotalOutput,
+        adapterWatts: battery.adapterWatts,
+        timeToFull: battery.timeToFull,
+        timeToEmpty: battery.timeToEmpty
+    )
 
-    print()
-    if battery.externalConnected {
-        if batteryCharging {
-            print("Battery:       Charging at \(formatWatts(batteryChargingW))" +
-                  "  (\(battery.currentCapacity)%," +
-                  " \(formatTime(battery.timeToFull)) to full)")
-        } else if batteryDischarging {
-            print("Battery:       Supplementing charger at \(formatWatts(abs(batteryPowerRaw)))" +
-                  "  (\(battery.currentCapacity)%)")
-        } else if battery.fullyCharged {
-            print("Battery:       Fully charged  (\(battery.currentCapacity)%)")
-        } else {
-            print("Battery:       Not charging  (\(battery.currentCapacity)%)")
-        }
-        print("Charger:       \(battery.adapterWatts)W adapter, delivering \(formatWatts(chargerTotalOutput))")
-    } else {
-        print("Battery:       Discharging  \(battery.currentCapacity)%" +
-              "  (\(formatTime(battery.timeToEmpty)) remaining)")
-        print("Charger:       Not connected")
-    }
+    render(snapshot)
 }
 
 // Parse arguments
