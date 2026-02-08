@@ -190,85 +190,122 @@ func formatTime(_ minutes: Int) -> String {
 
 // MARK: - Main
 
-guard let battery = readBatteryInfo() else {
-    fputs("Error: Could not read battery information.\n", stderr)
-    exit(1)
+func displayPowerInfo(smc: SMCReader?) {
+    guard let battery = readBatteryInfo() else {
+        fputs("Error: Could not read battery information.\n", stderr)
+        return
+    }
+
+    // Read SMC power values
+    let systemPower = smc?.readFloat("PSTR").map(Double.init)  // total system/platform power
+
+    // Battery power from IOKit: V(mV) × I(mA) / 1,000,000 = W
+    // Positive amperage = charging (battery absorbing power)
+    // Negative amperage = discharging (battery providing power)
+    let batteryPowerRaw = Double(battery.voltage) * Double(battery.amperage) / 1_000_000.0
+
+    // Determine power flow
+    let batteryDischarging = battery.amperage < 0
+    let batteryCharging = battery.amperage > 0 && battery.isCharging
+
+    // System power consumption
+    let systemW: Double
+    if let sp = systemPower, sp > 0 {
+        systemW = sp
+    } else if batteryDischarging {
+        // Fallback: on battery, system power = battery discharge rate
+        systemW = abs(batteryPowerRaw)
+    } else {
+        systemW = 0
+    }
+
+    // Power source breakdown
+    let fromCharger: Double
+    let fromBattery: Double
+
+    if battery.externalConnected {
+        if batteryDischarging {
+            // Battery supplementing charger (heavy load)
+            fromBattery = abs(batteryPowerRaw)
+            fromCharger = max(0, systemW - fromBattery)
+        } else {
+            // Charger provides all system power
+            fromCharger = systemW
+            fromBattery = 0
+        }
+    } else {
+        // On battery only
+        fromCharger = 0
+        fromBattery = systemW
+    }
+
+    // Battery charging power (what goes into the battery)
+    let batteryChargingW = batteryCharging ? batteryPowerRaw : 0
+
+    // Total charger output (system + battery charging)
+    let chargerTotalOutput = battery.externalConnected ? fromCharger + batteryChargingW : 0
+
+    // Display
+    print("System Power:  \(formatWatts(systemW))")
+    print("  From Charger:  \(formatWatts(fromCharger))")
+    print("  From Battery:  \(formatWatts(fromBattery))")
+
+    print()
+    if battery.externalConnected {
+        if batteryCharging {
+            print("Battery:       Charging at \(formatWatts(batteryChargingW))" +
+                  "  (\(battery.currentCapacity)%," +
+                  " \(formatTime(battery.timeToFull)) to full)")
+        } else if batteryDischarging {
+            print("Battery:       Supplementing charger at \(formatWatts(abs(batteryPowerRaw)))" +
+                  "  (\(battery.currentCapacity)%)")
+        } else if battery.fullyCharged {
+            print("Battery:       Fully charged  (\(battery.currentCapacity)%)")
+        } else {
+            print("Battery:       Not charging  (\(battery.currentCapacity)%)")
+        }
+        print("Charger:       \(battery.adapterWatts)W adapter, delivering \(formatWatts(chargerTotalOutput))")
+    } else {
+        print("Battery:       Discharging  \(battery.currentCapacity)%" +
+              "  (\(formatTime(battery.timeToEmpty)) remaining)")
+        print("Charger:       Not connected")
+    }
+}
+
+// Parse arguments
+var watchInterval: Double? = nil
+let args = CommandLine.arguments
+var i = 1
+while i < args.count {
+    if args[i] == "-w" {
+        if i + 1 < args.count, let val = Double(args[i + 1]), val > 0 {
+            watchInterval = val
+            i += 2
+        } else {
+            watchInterval = 1.0
+            i += 1
+        }
+    } else {
+        fputs("Usage: watt [-w [seconds]]\n", stderr)
+        exit(1)
+    }
 }
 
 let smc = SMCReader()
 
-// Read SMC power values
-let systemPower = smc?.readFloat("PSTR").map(Double.init)  // total system/platform power
-let dcInPower = smc?.readFloat("PDTR").map(Double.init)    // DC-in power to system
-
-// Battery power from IOKit: V(mV) × I(mA) / 1,000,000 = W
-// Positive amperage = charging (battery absorbing power)
-// Negative amperage = discharging (battery providing power)
-let batteryPowerRaw = Double(battery.voltage) * Double(battery.amperage) / 1_000_000.0
-
-// Determine power flow
-let batteryDischarging = battery.amperage < 0
-let batteryCharging = battery.amperage > 0 && battery.isCharging
-
-// System power consumption
-let systemW: Double
-if let sp = systemPower, sp > 0 {
-    systemW = sp
-} else if batteryDischarging {
-    // Fallback: on battery, system power = battery discharge rate
-    systemW = abs(batteryPowerRaw)
-} else {
-    systemW = 0
-}
-
-// Power source breakdown
-let fromCharger: Double
-let fromBattery: Double
-
-if battery.externalConnected {
-    if batteryDischarging {
-        // Battery supplementing charger (heavy load)
-        fromBattery = abs(batteryPowerRaw)
-        fromCharger = max(0, systemW - fromBattery)
-    } else {
-        // Charger provides all system power
-        fromCharger = systemW
-        fromBattery = 0
+if let interval = watchInterval {
+    // Clear screen, then loop with cursor-home to avoid flicker
+    print("\u{1B}[2J", terminator: "")
+    fflush(stdout)
+    while true {
+        print("\u{1B}[H", terminator: "")
+        fflush(stdout)
+        displayPowerInfo(smc: smc)
+        // Clear any leftover lines from previous output
+        print("\u{1B}[J", terminator: "")
+        fflush(stdout)
+        Thread.sleep(forTimeInterval: interval)
     }
 } else {
-    // On battery only
-    fromCharger = 0
-    fromBattery = systemW
-}
-
-// Battery charging power (what goes into the battery)
-let batteryChargingW = batteryCharging ? batteryPowerRaw : 0
-
-// Total charger output (system + battery charging)
-let chargerTotalOutput = battery.externalConnected ? fromCharger + batteryChargingW : 0
-
-// Display
-print("System Power:  \(formatWatts(systemW))")
-print("  From Charger:  \(formatWatts(fromCharger))")
-print("  From Battery:  \(formatWatts(fromBattery))")
-
-print()
-if battery.externalConnected {
-    if batteryCharging {
-        print("Battery:       Charging at \(formatWatts(batteryChargingW))" +
-              "  (\(battery.currentCapacity)%," +
-              " \(formatTime(battery.timeToFull)) to full)")
-    } else if batteryDischarging {
-        print("Battery:       Supplementing charger at \(formatWatts(abs(batteryPowerRaw)))" +
-              "  (\(battery.currentCapacity)%)")
-    } else if battery.fullyCharged {
-        print("Battery:       Fully charged  (\(battery.currentCapacity)%)")
-    } else {
-        print("Battery:       Not charging  (\(battery.currentCapacity)%)")
-    }
-    print("Charger:       \(battery.adapterWatts)W adapter, delivering \(formatWatts(chargerTotalOutput))")
-} else {
-    print("Battery:       Discharging  \(battery.currentCapacity)%" +
-          "  (\(formatTime(battery.timeToEmpty)) remaining)")
-    print("Charger:       Not connected")
+    displayPowerInfo(smc: smc)
 }
