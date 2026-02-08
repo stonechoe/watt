@@ -2,9 +2,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "power",
+    name: "watt",
     platforms: [.macOS(.v12)],
     targets: [
-        .executableTarget(name: "power", path: "Sources"),
+        .executableTarget(name: "watt", path: "Sources"),
     ]
 )

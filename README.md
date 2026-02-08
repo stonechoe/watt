@@ -1,4 +1,4 @@
-# power
+# watt
 
 A macOS CLI utility that displays real-time power consumption of your MacBook, broken down by source (charger vs battery).
 
@@ -14,18 +14,18 @@ A macOS CLI utility that displays real-time power consumption of your MacBook, b
 swift build -c release
 ```
 
-The binary is at `.build/release/power`.
+The binary is at `.build/release/watt`.
 
 ## Install
 
 ```
-cp .build/release/power /usr/local/bin/
+cp .build/release/watt /usr/local/bin/
 ```
 
 ## Usage
 
 ```
-power
+watt
 ```
 
 No flags, no sudo required.
