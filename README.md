@@ -25,55 +25,58 @@ cp .build/release/watt /usr/local/bin/
 ## Usage
 
 ```
-watt
+watt            # one-shot display
+watt -w         # watch mode (1s refresh)
+watt -w 0.5     # watch mode (custom interval)
 ```
 
-No flags, no sudo required.
+No sudo required.
+
+Output is color-coded when writing to a terminal, and automatically plain when piped or redirected. Set `NO_COLOR=1` to force plain output.
 
 ### Example output
 
 **On battery:**
 
 ```
-System Power:  9.49 W
-  From Charger:  0.00 W
-  From Battery:  9.49 W
+System    9.49 W
+  Charger  0.00 W
+  Battery  9.49 W
 
-Battery:       Discharging  79%  (4h 17m remaining)
-Charger:       Not connected
+████████████████░░░░ 79%  Discharging · 4h 17m remaining
 ```
 
 **On charger, charging:**
 
 ```
-System Power:  11.6 W
-  From Charger:  11.6 W
-  From Battery:  0.00 W
+System   11.6 W
+  Charger  11.6 W
+  Battery  0.00 W
 
-Battery:       Charging at 45.5 W  (72%, 1h 12m to full)
-Charger:       60W adapter, delivering 57.1 W
+██████████████░░░░░░ 72%  Charging at 45.5 W · 1h 12m to full
+60W adapter · delivering 57.1 W
 ```
 
 **On charger, not charging (e.g. optimized charging hold at 80%):**
 
 ```
-System Power:  11.6 W
-  From Charger:  11.6 W
-  From Battery:  0.00 W
+System   11.6 W
+  Charger  11.6 W
+  Battery  0.00 W
 
-Battery:       Not charging  (80%)
-Charger:       60W adapter, delivering 11.6 W
+████████████████░░░░ 80%  Not charging
+60W adapter · delivering 11.6 W
 ```
 
 **Heavy load, battery supplementing charger:**
 
 ```
-System Power:  58.3 W
-  From Charger:  48.3 W
-  From Battery:  10.0 W
+System   58.3 W
+  Charger  48.3 W
+  Battery  10.0 W
 
-Battery:       Supplementing charger at 10.0 W  (65%)
-Charger:       60W adapter, delivering 48.3 W
+█████████████░░░░░░░ 65%  Supplementing charger at 10.0 W
+60W adapter · delivering 48.3 W
 ```
 
 ## How it works
